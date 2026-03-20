@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Neon Drift — 縦シュー</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game" aria-label="縦スクロールシューティングゲーム"></canvas>
+  <div id="hud">
+    <div class="hud-col">
+      <span id="score">SCORE 0</span>
+      <span id="chain" class="hud-sub">CHAIN —</span>
+    </div>
+    <span id="lives">♥♥♥</span>
+    <div class="hud-col hud-col-right">
+      <span id="wave">WAVE 1</span>
+      <span id="bombs" class="hud-sub">BOMB 2</span>
+    </div>
+  </div>
+  <div id="overlay">
+    <div class="panel">
+      <h1 id="title">NEON DRIFT</h1>
+      <p id="subtitle">矢印 / WASD で移動 · Space でショット · B でボム</p>
+      <button type="button" id="startBtn">スタート</button>
+      <p class="hint">Pause: P · リトライ: R · 連続撃墜でスコア倍率</p>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
