@@ -12,6 +12,7 @@
   const waveEl = document.getElementById("wave");
   const chainEl = document.getElementById("chain");
   const bombsEl = document.getElementById("bombs");
+  const hiScoreEl = document.getElementById("hiscore");
 
   let dpr = 1;
   let W = 0;
@@ -58,6 +59,86 @@
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  let highScore = (() => {
+    try { return parseInt(localStorage.getItem("neonDrift_hi") || "0", 10) || 0; }
+    catch (_) { return 0; }
+  })();
+
+  const sfx = (() => {
+    let ac = null;
+    let dest = null;
+
+    function setup() {
+      if (ac) return true;
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        const comp = ac.createDynamicsCompressor();
+        comp.connect(ac.destination);
+        dest = comp;
+        return true;
+      } catch (_) { return false; }
+    }
+
+    function resume() {
+      if (ac && ac.state === "suspended") ac.resume().catch(() => {});
+    }
+
+    function tone(freq, type, t0, dur, vol, freqEnd) {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.connect(gain);
+      gain.connect(dest);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0);
+      if (freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(0.01, freqEnd), t0 + dur);
+      gain.gain.setValueAtTime(vol, t0);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.01);
+    }
+
+    function noise(t0, dur, vol, decay) {
+      const sr = ac.sampleRate;
+      const n = Math.ceil(sr * dur);
+      const buf = ac.createBuffer(1, n, sr);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay);
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      const gain = ac.createGain();
+      gain.gain.setValueAtTime(vol, t0);
+      src.connect(gain);
+      gain.connect(dest);
+      src.start(t0);
+    }
+
+    function go(fn) {
+      if (!setup()) return;
+      resume();
+      try { fn(ac.currentTime); } catch (_) {}
+    }
+
+    return {
+      shoot()    { go(t => tone(820, "square",   t, 0.04, 0.055, 360)); },
+      hit()      { go(t => tone(160, "sawtooth", t, 0.18, 0.28,  55)); },
+      pickup()   { go(t => [660, 880, 1100].forEach((f, i) => tone(f, "sine", t + i * 0.07, 0.08, 0.14))); },
+      wave()     { go(t => [440, 550, 660].forEach((f, i) => tone(f, "sine", t + i * 0.1, 0.1, 0.14))); },
+      gameOver() { go(t => [440, 330, 220].forEach((f, i) => tone(f, "sawtooth", t + i * 0.15, 0.18, 0.18))); },
+      explode(big) {
+        go(t => {
+          noise(t, big ? 0.5 : 0.22, big ? 0.55 : 0.32, big ? 1.8 : 2.5);
+          if (big) tone(90, "sine", t, 0.45, 0.45, 28);
+        });
+      },
+      bomb() {
+        go(t => {
+          noise(t, 0.6, 0.65, 1.5);
+          tone(90, "sine", t, 0.5, 0.45, 28);
+        });
+      },
+    };
+  })();
 
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -136,6 +217,11 @@
     else if (m <= 1) chainEl.textContent = `CHAIN ${state.comboChain}`;
     else chainEl.textContent = `CHAIN ${state.comboChain} (x${m})`;
     bombsEl.textContent = `BOMB ${state.bombs}`;
+    if (state.score > highScore) {
+      highScore = state.score;
+      try { localStorage.setItem("neonDrift_hi", String(highScore)); } catch (_) {}
+    }
+    hiScoreEl.textContent = `HI ${highScore.toLocaleString("ja-JP")}`;
   }
 
   function spawnPickupAt(x, y) {
@@ -166,6 +252,7 @@
     state.score += pts;
     const isBoss = e.type === "boss";
     spawnParticles(e.x, e.y, isBoss ? 42 : e.type === "tank" ? 32 : 22, isBoss ? "#ffcc66" : "#ffb4d4", 1);
+    if (!fromBomb) sfx.explode(isBoss);
     const pickupChance = fromBomb ? 0.055 : 0.085 + state.wave * 0.005;
     if (Math.random() < pickupChance) spawnPickupAt(e.x, e.y);
     const sub = !fromBomb && mult > 1 ? `x${mult}` : "";
@@ -180,6 +267,7 @@
     state.bombFlash = 0.34;
     player.inv = Math.max(player.inv, 55);
     addShake(18);
+    sfx.bomb();
     spawnParticles(player.x, player.y - 30, 36, "#fdf8ff", 1.4);
     state.comboChain = 0;
     state.comboTime = 0;
@@ -222,17 +310,18 @@
   }
 
   function firePlayer() {
+    sfx.shoot();
     const spread = state.powerTimer > 0 ? 3 : 1;
     const baseDamage = state.powerTimer > 0 ? 1.2 : 1;
     if (spread === 1) {
-      bullets.push({ x: player.x, y: player.y - 20, vy: -720, dmg: baseDamage });
+      bullets.push({ x: player.x, y: player.y - 20, vy: -460, dmg: baseDamage });
     } else {
       for (let i = -1; i <= 1; i++) {
         bullets.push({
           x: player.x + i * 10,
           y: player.y - 18,
-          vy: -700,
-          vx: i * 40,
+          vy: -440,
+          vx: i * 38,
           dmg: baseDamage * 0.85,
         });
       }
@@ -288,6 +377,7 @@
       spawnParticles(player.x, player.y, 18, "#88ddff", 0.9);
       state.comboChain = 0;
       state.comboTime = 0;
+      sfx.hit();
       updateHud();
       return;
     }
@@ -297,10 +387,14 @@
     player.inv = 120;
     addShake(10);
     spawnParticles(player.x, player.y, 28, "#ff6b9d", 1.2);
+    sfx.hit();
+    const prevHigh = highScore;
     updateHud();
     if (state.lives <= 0) {
       state.mode = "over";
-      titleEl.textContent = "GAME OVER";
+      sfx.gameOver();
+      const newRecord = state.score > 0 && highScore > prevHigh;
+      titleEl.textContent = newRecord ? "NEW RECORD!" : "GAME OVER";
       subtitleEl.textContent = `スコア ${state.score.toLocaleString("ja-JP")} · R でリトライ`;
       overlay.classList.remove("hidden");
     }
@@ -466,7 +560,7 @@
       const b = bullets[i];
       b.y += b.vy * dt;
       if (b.vx) b.x += b.vx * dt;
-      if (b.y < -20 || b.x < -20 || b.x > W + 20) bullets.splice(i, 1);
+      if (b.y < 0 || b.x < -20 || b.x > W + 20) bullets.splice(i, 1);
     }
     for (let i = enemyBullets.length - 1; i >= 0; i--) {
       const b = enemyBullets[i];
@@ -493,6 +587,7 @@
         else if (p.kind === "barrier") state.barrierHits = Math.min(3, state.barrierHits + 1);
         else if (p.kind === "bomb") state.bombs = Math.min(5, state.bombs + 1);
         pickups.splice(i, 1);
+        sfx.pickup();
         spawnParticles(p.x, p.y, 14, col, 0.85);
         updateHud();
       }
@@ -516,6 +611,7 @@
       let hit = false;
       for (let j = enemies.length - 1; j >= 0; j--) {
         const e = enemies[j];
+        if (e.y < 0) continue;
         const er = enemyBulletHitRadius(e);
         if (circlesOverlap(b.x, b.y, 3, e.x, e.y, er)) {
           e.hp -= b.dmg || 1;
@@ -568,6 +664,7 @@
       state.spawnAcc = 0;
       state.waveBanner = 2.6;
       if (state.wave % 5 === 0 && state.wave > 0) spawnBoss();
+      sfx.wave();
       updateHud();
     }
   }
@@ -936,5 +1033,6 @@
 
   window.addEventListener("resize", resize);
   resize();
+  hiScoreEl.textContent = `HI ${highScore.toLocaleString("ja-JP")}`;
   requestAnimationFrame(frame);
 })();
