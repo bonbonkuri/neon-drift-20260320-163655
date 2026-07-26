@@ -5,6 +5,10 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   const overlay = document.getElementById("overlay");
   const startBtn = document.getElementById("startBtn");
+  const learnBtn = document.getElementById("learnBtn");
+  const learnBanner = document.getElementById("learnBanner");
+  const learnTextEl = document.getElementById("learnText");
+  const learnExitBtn = document.getElementById("learnExitBtn");
   const titleEl = document.getElementById("title");
   const subtitleEl = document.getElementById("subtitle");
   const scoreEl = document.getElementById("score");
@@ -37,7 +41,22 @@
     barrierHits: 0,
     waveBanner: 0,
     bombFlash: 0,
+    learnStep: 0,
+    learnFree: false,
+    learnMoveHeld: 0,
+    learnShots: 0,
+    learnBombDone: false,
+    learnPauseArmed: false,
+    learnPauseDone: false,
   };
+
+  const learnSteps = [
+    { text: "矢印キー / WASD で自機を動かしてみよう", check: () => state.learnMoveHeld > 1.1 },
+    { text: "Space (または Z) でショットを撃ってみよう", check: () => state.learnShots >= 6 },
+    { text: "B でボムを発動してみよう", check: () => state.learnBombDone },
+    { text: "P でポーズ / 再開してみよう", check: () => state.learnPauseDone },
+    { text: "よくできた! ここからは自由に練習しよう — 敵が出現するよ", enterFree: true },
+  ];
 
   const player = {
     x: 0,
@@ -202,6 +221,65 @@
     updateHud();
   }
 
+  function checkLearnStep() {
+    if (state.learnFree) return;
+    const step = learnSteps[state.learnStep];
+    if (step && step.check && step.check()) learnAdvance();
+  }
+
+  function learnAdvance() {
+    state.learnStep += 1;
+    const step = learnSteps[state.learnStep];
+    if (!step) return;
+    if (step.enterFree) {
+      state.learnFree = true;
+      state.spawnAcc = 0;
+    }
+    learnTextEl.textContent = step.text;
+  }
+
+  function learnSpawnLogic(dt) {
+    state.spawnAcc += dt;
+    const interval = 1.1;
+    while (state.spawnAcc >= interval) {
+      state.spawnAcc -= interval;
+      spawnEnemy();
+    }
+  }
+
+  function startLearn(ev) {
+    if (ev) ev.preventDefault();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    overlay.classList.add("hidden");
+    resetGame();
+    state.mode = "learn";
+    state.learnStep = 0;
+    state.learnFree = false;
+    state.learnMoveHeld = 0;
+    state.learnShots = 0;
+    state.learnBombDone = false;
+    state.learnPauseArmed = false;
+    state.learnPauseDone = false;
+    learnBanner.classList.remove("hidden");
+    learnTextEl.textContent = learnSteps[0].text;
+  }
+
+  function returnToMenu() {
+    state.mode = "menu";
+    state.learnFree = false;
+    learnBanner.classList.add("hidden");
+    bullets = [];
+    enemies = [];
+    enemyBullets = [];
+    particles = [];
+    pickups = [];
+    floatTexts = [];
+    titleEl.textContent = "NEON DRIFT";
+    subtitleEl.textContent = "矢印 / WASD で移動 · Space でショット · B でボム";
+    overlay.classList.remove("hidden");
+    resize();
+  }
+
   function comboMultiplier() {
     if (state.comboChain <= 0) return 1;
     return Math.min(5, 1 + Math.floor((state.comboChain - 1) / 2));
@@ -261,7 +339,7 @@
   }
 
   function useBomb() {
-    if (state.bombs <= 0 || state.mode !== "play" || state.paused) return;
+    if (state.bombs <= 0 || (state.mode !== "play" && state.mode !== "learn") || state.paused) return;
     state.bombs -= 1;
     enemyBullets.length = 0;
     state.bombFlash = 0.34;
@@ -271,6 +349,7 @@
     spawnParticles(player.x, player.y - 30, 36, "#fdf8ff", 1.4);
     state.comboChain = 0;
     state.comboTime = 0;
+    if (state.mode === "learn") state.learnBombDone = true;
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
       if (e.type === "boss") {
@@ -311,6 +390,7 @@
 
   function firePlayer() {
     sfx.shoot();
+    if (state.mode === "learn") state.learnShots += 1;
     const spread = state.powerTimer > 0 ? 3 : 1;
     const baseDamage = state.powerTimer > 0 ? 1.2 : 1;
     if (spread === 1) {
@@ -369,7 +449,14 @@
   }
 
   function hurtPlayer() {
-    if (player.inv > 0 || state.mode !== "play") return;
+    if (player.inv > 0 || (state.mode !== "play" && state.mode !== "learn")) return;
+    if (state.mode === "learn") {
+      player.inv = 60;
+      addShake(6);
+      spawnParticles(player.x, player.y, 14, "#88ddff", 0.8);
+      sfx.hit();
+      return;
+    }
     if (state.barrierHits > 0) {
       state.barrierHits -= 1;
       player.inv = 48;
@@ -458,8 +545,10 @@
 
     if (player.inv > 0) player.inv -= 1;
 
+    if (state.mode === "learn" && (mx || my)) state.learnMoveHeld += dt;
+
     const wantShoot = keys[" "] || keys.Space || keys.z || keys.Z;
-    if (state.mode === "play" && wantShoot) {
+    if ((state.mode === "play" || state.mode === "learn") && wantShoot) {
       player.shootCd -= dt;
       if (player.shootCd <= 0) {
         firePlayer();
@@ -932,7 +1021,7 @@
   }
 
   function drawPause() {
-    if (!state.paused || state.mode !== "play") return;
+    if (!state.paused || (state.mode !== "play" && state.mode !== "learn")) return;
     ctx.fillStyle = "rgba(5, 8, 20, 0.55)";
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#a8f0ff";
@@ -968,6 +1057,17 @@
       updateFloatTexts(dt);
       if (state.waveBanner > 0) state.waveBanner -= dt;
       if (state.bombFlash > 0) state.bombFlash -= dt;
+    } else if (state.mode === "learn" && !state.paused) {
+      updatePlayer(dt);
+      if (state.learnFree) learnSpawnLogic(dt);
+      updateEnemies(dt);
+      updateBullets(dt);
+      collide();
+      cullEnemiesBelowScreen();
+      updateParticles(dt);
+      updateFloatTexts(dt);
+      if (state.bombFlash > 0) state.bombFlash -= dt;
+      checkLearnStep();
     } else if (state.mode === "menu") {
       updatePlayer(dt);
     }
@@ -993,12 +1093,19 @@
   window.addEventListener("keydown", (ev) => {
     keys[ev.key] = true;
     if ((ev.key === "b" || ev.key === "B") && !ev.repeat) {
-      if (state.mode === "play" && !state.paused) useBomb();
+      if ((state.mode === "play" || state.mode === "learn") && !state.paused) useBomb();
     }
     if (ev.key === "p" || ev.key === "P") {
-      if (state.mode === "play") {
+      if (state.mode === "play" || state.mode === "learn") {
         state.paused = !state.paused;
+        if (state.mode === "learn") {
+          if (state.paused) state.learnPauseArmed = true;
+          else if (state.learnPauseArmed) state.learnPauseDone = true;
+        }
       }
+    }
+    if (ev.key === "Escape") {
+      if (state.mode === "learn") returnToMenu();
     }
     if (ev.key === "r" || ev.key === "R") {
       if (state.mode === "over") {
@@ -1017,6 +1124,7 @@
 
   function startGame(ev) {
     if (ev) ev.preventDefault();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     overlay.classList.add("hidden");
     resetGame();
     state.mode = "play";
@@ -1030,6 +1138,21 @@
     },
     { passive: false }
   );
+
+  learnBtn.addEventListener("click", startLearn);
+  learnBtn.addEventListener(
+    "touchend",
+    (ev) => {
+      startLearn(ev);
+    },
+    { passive: false }
+  );
+
+  learnExitBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    returnToMenu();
+  });
 
   window.addEventListener("resize", resize);
   resize();

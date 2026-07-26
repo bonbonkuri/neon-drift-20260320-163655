@@ -119,6 +119,14 @@ html, body {
   opacity: 0.65;
 }
 
+.btn-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
 #startBtn {
   appearance: none;
   border: none;
@@ -141,4 +149,74 @@ html, body {
 
 #startBtn:active {
   transform: translateY(0);
+}
+
+#learnBtn.secondary {
+  appearance: none;
+  padding: 13px 28px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #c4e8ff;
+  background: transparent;
+  border: 1px solid rgba(140, 210, 255, 0.5);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+#learnBtn.secondary:hover {
+  transform: translateY(-2px);
+  background: rgba(120, 200, 255, 0.12);
+  border-color: rgba(160, 220, 255, 0.85);
+}
+
+#learnBtn.secondary:active {
+  transform: translateY(0);
+}
+
+#learnBanner {
+  position: fixed;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  text-align: center;
+  padding: 12px 26px;
+  border: 1px solid rgba(140, 210, 255, 0.35);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(20, 35, 70, 0.7), rgba(10, 15, 35, 0.8));
+  box-shadow: 0 0 24px rgba(80, 160, 255, 0.25);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  max-width: min(92vw, 640px);
+}
+
+#learnBanner.hidden {
+  opacity: 0;
+}
+
+#learnText {
+  color: #e8f8ff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 12px rgba(100, 220, 255, 0.5);
+}
+
+.learn-sub {
+  appearance: none;
+  border: none;
+  background: transparent;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(200, 220, 255, 0.7);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.learn-sub:hover {
+  color: rgba(220, 235, 255, 0.95);
 }
