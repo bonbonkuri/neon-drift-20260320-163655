@@ -142,3 +142,24 @@ html, body {
 #startBtn:active {
   transform: translateY(0);
 }
+
+.ghost-btn {
+  appearance: none;
+  display: block;
+  margin: 12px auto 0;
+  border: 1px solid rgba(140, 200, 255, 0.45);
+  padding: 10px 22px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #b8e4ff;
+  background: rgba(20, 35, 70, 0.45);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.ghost-btn:hover {
+  background: rgba(40, 70, 120, 0.55);
+  border-color: rgba(180, 230, 255, 0.7);
+}
